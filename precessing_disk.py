@@ -9,16 +9,14 @@ from numpy import mean, pi, cos, sin, array, sqrt, arctan2, tan, abs
 from bokeh.io import curdoc
 from bokeh.layouts import row, column
 from bokeh.plotting import figure
-from bokeh.models import LinearColorMapper
+from bokeh.models import LinearColorMapper, PolarTransform
 import pickle
 import pandas as pd
 
 from bokeh.models import ColumnDataSource, BoxZoomTool, CrosshairTool, ResetTool
-from bokeh.models import SaveTool, PanTool, FileInput, Div, DataTable, TableColumn
+from bokeh.models import SaveTool, PanTool, FileInput, Div, DataTable, TableColumn, FixedTicker
 from bokeh.models.widgets import Slider, TextInput, Button
 from sqlalchemy import null
-
-# from plotter import bin_not_data, bin_t60_data
 
 # Parameters of the model (angles in degrees)
 
@@ -33,9 +31,6 @@ q0          = 0     # constant level of Q
 u0          = 0     # constant level of U
 f0_disk     = 0     # typical scattering fraction of the disk
 f0_cloud    = 0.5     # typical scattering fraction of the cloud
-
-# P_orb       = 5.59983     # orbital period
-# P_sup       = 13*P_orb    # superorbital period
 
 rad = np.pi/180.0
 
@@ -55,9 +50,6 @@ def errorbar(fig, x, y, xerr=None, yerr=None, color='red',
              
     fig.circle(x, y, color=color, **point_kwargs)
 
-#   x = np.array(x)
-#   y = np.array(y)
-#   xerr = np.array()
     y_err_x = []
     y_err_y = []
     for px, py, err in zip(x, y, yerr):
@@ -73,13 +65,14 @@ def calc_lambda_from_phi(phi, e, l_p, phi_0):
         E = M + e*sin(E)
     return 2. * arctan2(sqrt(1. + e) * tan(E/2.), sqrt(1. - e)) + l_p
 
-    
+ 
 def thomson_model(phi, phi_sup, e, i, Omega, beta, l_p, phi_0, gamma_0, q0, u0, f0_disk, f0_cloud):
     l = calc_lambda_from_phi(phi, e, l_p, phi_0)
     
     gamma = 2*pi*phi_sup + gamma_0
     cos_Psi = sin(l)*sin(beta)*sin(gamma) + cos(l)*sin(beta)*cos(gamma)
     cos_Sigma = cos(i)*cos(beta) + sin(i)*sin(beta)*cos(gamma)
+    
     
     f0_disk_array = []
 
@@ -141,46 +134,38 @@ def thomson_model(phi, phi_sup, e, i, Omega, beta, l_p, phi_0, gamma_0, q0, u0, 
 def disk_and_cloud_q(l, l_p, i, e, f0_disk_array, f0_cloud, cos_Psi, cos_Sigma):
     f_sc_disk = f0_disk_array * (1 + e * cos(l - l_p))**2 * abs(cos_Psi)
     f_sc_cloud = f0_cloud * (1 + e * cos(l - l_p))**2
-    return 3./16. * (sin(i)**2 - (1. + cos(i)**2) * cos(2.*l))*(f_sc_cloud + (1. - f_sc_cloud)*f_sc_disk)
+    return 3./16. * (sin(i)**2 - (1. + cos(i)**2) * cos(2.*l))*(f_sc_cloud + f_sc_disk)
     
     
 def disk_and_cloud_u(l, l_p, i, e, f0_disk_array, f0_cloud, cos_Psi, cos_Sigma):
     f_sc_disk = f0_disk_array * (1 + e * cos(l - l_p))**2 * abs(cos_Psi)
     f_sc_cloud = f0_cloud * (1 + e * cos(l - l_p))**2
-    return - 3./8. * cos(i)*sin(2.*l) * (f_sc_cloud + (1. - f_sc_cloud)*f_sc_disk)
+    return - 3./8. * cos(i)*sin(2.*l) * (f_sc_cloud + f_sc_disk)
 
             
 def main(): 
-# phi = original_dataframe.data['phi']
-# phi_sup = np.zeros(len(phi))
-
-# print(phi)
     npoints = 100
     rad = np.pi/180
     phi = np.linspace(0, 1, npoints)
     phi_sup = np.zeros(npoints)
     q, u = thomson_model(phi, phi_sup, e, i*rad, Omega*rad, beta*rad, l_p*rad, phi_0, gamma_0, q0, u0, f0_disk, f0_cloud)
-# q += 0.4
-# u += -4.5
+
     p = np.sqrt(q**2 + u**2)
     pa = 0.5*np.arctan2(u, q)*180/np.pi
     
     source = ColumnDataSource(data=dict(x=phi, q=q, u=u, p=p, pa=pa))
 
 
-# Set up plot
-    plotQ = figure(plot_height=300, plot_width=500, title="my sine wave",
+    # Set up plots
+    plotQ = figure(plot_height=400, plot_width=500, title="my sine wave",
               tools="crosshair,pan,reset,save,wheel_zoom, box_zoom",
               x_range=[0, 1], y_range=[-0.5, 0.5])
-
-
-# plotQ.scatter('x', 'q', source=source, line_width=1, line_alpha=1)
 
     plotQ.ray(x=[0.25], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
     plotQ.ray(x=[0.50], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
     plotQ.ray(x=[0.75], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
 
-    plotU = figure(plot_height=300, plot_width=500, title="my sine wave",
+    plotU = figure(plot_height=400, plot_width=500, title="my sine wave",
                tools="crosshair,pan,reset,save,wheel_zoom, box_zoom",
                x_range=[0, 1], y_range=[-0.5, 0.5])
 
@@ -189,7 +174,7 @@ def main():
     plotU.ray(x=[0.75], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
 
     
-    plotP = figure(plot_height=300, plot_width=500, title="PD",
+    plotP = figure(plot_height=400, plot_width=500, title="PD",
                tools="crosshair,pan,reset,save,wheel_zoom, box_zoom",
                x_range=[0, 1], y_range=[0, 10])
 
@@ -198,24 +183,54 @@ def main():
     plotP.ray(x=[0.75], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
 
 
-    plotPA = figure(plot_height=300, plot_width=500, title="PD",
+    plotPA = figure(plot_height=400, plot_width=500, title="PD",
                tools="crosshair,pan,reset,save,wheel_zoom, box_zoom",
                x_range=[0, 1], y_range=[-180, 180])
 
-    plotPA.ray(x=[0.25], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
-    plotPA.ray(x=[0.50], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
-    plotPA.ray(x=[0.75], y=-5, length=10, angle=pi/2, line_width=1, alpha=0.3)
+    plotPA.ray(x=[0.25], y=-205, length=1000, angle=pi/2, line_width=1, alpha=0.3)
+    plotPA.ray(x=[0.50], y=-205, length=1000, angle=pi/2, line_width=1, alpha=0.3)
+    plotPA.ray(x=[0.75], y=-205, length=1000, angle=pi/2, line_width=1, alpha=0.3)
     
     
     plotQU = figure(plot_height=300, plot_width=500, title="QU",
               tools="crosshair,pan,reset,save,wheel_zoom, box_zoom",
               x_range=[-1, 1], y_range=[-1, 1])
 
-# plotQU.scatter('q', 'u', source=source, line_width=1, line_alpha=1)
     plotQ.line('x', 'q', source=source, line_width=5, line_alpha=1)
     plotU.line('x', 'u', source=source, line_width=5, line_alpha=1)
     plotP.line('x', 'p', source=source, line_width=5, line_alpha=1)
     plotPA.line('x', 'pa', source=source, line_width=5, line_alpha=1)
+
+    plotOrbit = figure(plot_height=300, plot_width=300,
+                       x_range=[-2, 2], y_range=[-2, 2])
+    
+    plotOrbit.scatter(x=[0], y=[0], marker='circle', size=15, fill_alpha=0.3)
+    plotOrbit.text(x=[0 - 0.07], y=[1.7], text=['N'])
+    plotOrbit.text(x=[-1.8], y=[-0.15], text=['E'])
+    
+        
+    def calc_ellipse(e, omega, incl):
+        angles_ellipse = np.linspace(0, 2*np.pi, 200)
+        ellipse = (1.0 - e**2) / (1.0 + e*np.cos(angles_ellipse))
+        xp = ellipse*np.cos(angles_ellipse)
+        yp = ellipse*np.sin(angles_ellipse)
+        
+        xp = xp
+        yp = yp*np.cos(incl)
+        
+        x = xp * np.cos(omega) - yp * np.sin(omega)
+        y = xp * np.sin(omega) + yp * np.cos(omega)
+        
+        return {'x':x, 'y':y}
+        
+    
+    ellipse_df = ColumnDataSource(calc_ellipse(e, Omega, i))
+    
+    plotOrbit.line(x='x', y='y', source=ellipse_df, line_width=3, color='red')
+    plotOrbit.xaxis[0].ticker=FixedTicker(ticks=[])
+    plotOrbit.yaxis[0].ticker=FixedTicker(ticks=[])
+    plotOrbit.ray(x=-10, y=0, length=30, angle=0, line_width=1, alpha=0.3)
+    plotOrbit.ray(x=0, y=-10, length=30, angle=pi/2, line_width=1, alpha=0.3)
 
     global original_dataframe
     original_dataframe = ColumnDataSource({'phi': [], 'q' : [], 'u' : [], 'error' : []})
@@ -239,22 +254,28 @@ def main():
             print(original_dataframe.data)
         
             min_y, max_y = min(original_dataframe.data['q']), max(original_dataframe.data['q'])
-            plotQ.y_range.start = min_y - 0.1*(max_y - min_y)
-            plotQ.y_range.end = max_y + 0.1*(max_y - min_y)
+            plotQ.y_range.start = min_y - 0.5*(max_y - min_y)
+            plotQ.y_range.end = max_y + 0.5*(max_y - min_y)
             errorbar(plotQ, original_dataframe.data['phi'], original_dataframe.data['q'], yerr = np.array(original_dataframe.data['error']), color='red')
             
             min_y, max_y = min(original_dataframe.data['u']), max(original_dataframe.data['u'])
-            plotU.y_range.start = min_y - 0.1*(max_y - min_y)
-            plotU.y_range.end = max_y + 0.1*(max_y - min_y)
+            plotU.y_range.start = min_y - 0.5*(max_y - min_y)
+            plotU.y_range.end = max_y + 0.5*(max_y - min_y)
             errorbar(plotU, original_dataframe.data['phi'], original_dataframe.data['u'], yerr = np.array(original_dataframe.data['error']), color='red')
             
             p_obs = np.sqrt(original_dataframe.data['q']**2 + original_dataframe.data['u']**2)
             pa = 0.5*np.arctan2(original_dataframe.data['u'], original_dataframe.data['q'])*180/np.pi
             
             min_y, max_y = min(p_obs), max(p_obs)
-            plotP.y_range.start = min_y - 0.1*(max_y - min_y)
-            plotP.y_range.end = max_y + 0.1*(max_y - min_y)
+            plotP.y_range.start = min_y - 0.5*(max_y - min_y)
+            plotP.y_range.end = max_y + 0.5*(max_y - min_y)
             errorbar(plotP, original_dataframe.data['phi'], p_obs, yerr = np.array(original_dataframe.data['error']), color='red')
+               
+            min_y, max_y = min(pa), max(pa)
+            plotPA.y_range.start = min_y - 0.5*(max_y - min_y)
+            plotPA.y_range.end = max_y + 0.5*(max_y - min_y)
+            
+            errorbar(plotPA, original_dataframe.data['phi'], pa, yerr = 180/np.pi*np.array(original_dataframe.data['error'])/(2*p_obs), color='red')
             
         except ValueError:
             errors_div.text = 'Error: open the data file first!'
@@ -264,7 +285,7 @@ def main():
     file_input.on_change('filename', file_input_handler)
    
 
-# Set up widgets
+    # Set up widgets
     e_slider          = Slider(title="e", value=e, start=0, end=1.0, step=0.01)
     i_slider          = Slider(title="i", value=i, start=0, end=180, step=1)
     omega_slider      = Slider(title="omega", value=Omega, start=-180, end=180, step=1)
@@ -276,17 +297,17 @@ def main():
     gamma_0_slider    = Slider(title="gamma_0", value=gamma_0, start=0, end=360, step=1)
     f0_disk_slider    = Slider(title="f0_disk", value=f0_disk, start=0, end=10.0, step=0.01)
     f0_cloud_slider   = Slider(title="f0_cloud", value=f0_cloud, start=0, end=10.0, step=0.01)
-# p_sup_frac_slider = Slider(title="p_sup_in_orb", value=P_sup/P_orb, start=1, end=100, step=1)
-# multiplier_slider = Slider(title="p_sup_mult", value=1, start=1, end=101, step=100)
 
     data_plot_button = Button(label='Plot data')
     data_plot_button.on_click(plot_data)
-# Set up callbacks
+    
     plotQ.title.text = 'Stokes Q'
     plotU.title.text = 'Stokes U'
     plotP.title.text = 'PD'
     plotPA.title.text = 'PA'
 
+    # Set up callbacks
+    
     def update_data(attrname, old, new):
 
         # Get the current slider values
@@ -307,6 +328,7 @@ def main():
         p = np.sqrt(q**2 + u**2)
         pa = 0.5*np.arctan2(u, q)*180/np.pi
         source.data = dict(x=phi + phi_0, q=q, u=u, p=p, pa=pa)
+        ellipse_df.data = calc_ellipse(e, Omega, i)
         
 
     for w in [e_slider, i_slider ,omega_slider, lp_slider, q0_slider, u0_slider,
@@ -322,7 +344,7 @@ def main():
     instructions = Div(text="""Please, open ".txt" or ".csv" file with the data in the following format: <i>phi, q, u, err</i>.""")
     
     
-    inputs = column(logo, instructions, file_input, data_plot_button, e_slider, i_slider ,omega_slider, lp_slider, q0_slider, u0_slider,
+    inputs = column(logo, instructions, file_input, data_plot_button, plotOrbit, e_slider, i_slider ,omega_slider, lp_slider, q0_slider, u0_slider,
                 beta_slider, phi_0_slider, gamma_0_slider, f0_disk_slider, f0_cloud_slider)
 
     curdoc().add_root(row(column(plotQ, plotU, width=500), 
